@@ -171,7 +171,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
-    aoss_client: Optional['AsyncOpenSearch'] = None
+    aoss_client: Optional["AsyncOpenSearch"] = None
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
