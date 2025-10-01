@@ -1159,7 +1159,7 @@ async def get_status() -> StatusResponse:
         )
 
 
-@mcp.get('/health')
+@mcp.resource('/health')
 async def health_check():
     """Health check endpoint for Hugging Face Spaces."""
     return {'status': 'ok'}
