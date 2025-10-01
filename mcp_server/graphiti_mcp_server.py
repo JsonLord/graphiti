@@ -1159,7 +1159,7 @@ async def get_status() -> StatusResponse:
         )
 
 
-@mcp.resource('/health')
+@mcp.resource('http://graphiti/health')
 async def health_check():
     """Health check endpoint for Hugging Face Spaces."""
     return {'status': 'ok'}
