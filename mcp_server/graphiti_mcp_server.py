@@ -1159,6 +1159,12 @@ async def get_status() -> StatusResponse:
         )
 
 
+@mcp.get('/health')
+async def health_check():
+    """Health check endpoint for Hugging Face Spaces."""
+    return {'status': 'ok'}
+
+
 async def initialize_server() -> MCPConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
     global config
