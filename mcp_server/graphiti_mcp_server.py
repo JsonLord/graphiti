@@ -12,8 +12,10 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, TypedDict, cast
 
+import uvicorn
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
+from fastapi import FastAPI
 from mcp.server.fastmcp import FastMCP
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
@@ -562,11 +564,24 @@ For optimal performance, ensure the database is properly configured and accessib
 API keys are provided for any language model operations.
 """
 
+# Main FastAPI app
+app = FastAPI()
+
+
+@app.get('/health')
+async def health_check():
+    """Health check endpoint for Hugging Face Spaces."""
+    return {'status': 'ok'}
+
+
 # MCP server instance
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
+
+# Mount the MCP server as a sub-application
+app.mount('/', mcp)
 
 # Initialize Graphiti client
 graphiti_client: Graphiti | None = None
@@ -1159,9 +1174,6 @@ async def get_status() -> StatusResponse:
         )
 
 
-async def health_check():
-    """Health check endpoint for Hugging Face Spaces."""
-    return {'status': 'ok'}
 
 
 async def initialize_server() -> MCPConfig:
@@ -1240,9 +1252,6 @@ async def run_mcp_server():
     # Initialize the server
     mcp_config = await initialize_server()
 
-    # Add the health check route just before running the server
-    mcp.app.get('/health')(health_check)
-
     # Run the server with stdio transport for MCP in the same event loop
     logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
     if mcp_config.transport == 'stdio':
@@ -1251,7 +1260,10 @@ async def run_mcp_server():
         logger.info(
             f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
         )
-        await mcp.run_sse_async()
+        # Run the main app with uvicorn
+        config = uvicorn.Config(app, host=mcp.settings.host, port=mcp.settings.port)
+        server = uvicorn.Server(config)
+        await server.serve()
 
 
 def main():
