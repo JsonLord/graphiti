@@ -14,7 +14,6 @@ from typing import Any, TypedDict, cast
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
-from fastapi import FastAPI
 from mcp.server.fastmcp import FastMCP
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
@@ -564,11 +563,9 @@ API keys are provided for any language model operations.
 """
 
 # MCP server instance
-app = FastAPI()
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
-    app=app,
 )
 
 # Initialize Graphiti client
@@ -1162,7 +1159,6 @@ async def get_status() -> StatusResponse:
         )
 
 
-@app.get('/health')
 async def health_check():
     """Health check endpoint for Hugging Face Spaces."""
     return {'status': 'ok'}
@@ -1243,6 +1239,9 @@ async def run_mcp_server():
     """Run the MCP server in the current event loop."""
     # Initialize the server
     mcp_config = await initialize_server()
+
+    # Add the health check route just before running the server
+    mcp.app.get('/health')(health_check)
 
     # Run the server with stdio transport for MCP in the same event loop
     logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
