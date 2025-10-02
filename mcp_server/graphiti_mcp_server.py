@@ -14,6 +14,7 @@ from typing import Any, TypedDict, cast
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
+from fastapi import FastAPI
 from mcp.server.fastmcp import FastMCP
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
@@ -563,9 +564,11 @@ API keys are provided for any language model operations.
 """
 
 # MCP server instance
+app = FastAPI()
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    app=app,
 )
 
 # Initialize Graphiti client
@@ -1159,7 +1162,7 @@ async def get_status() -> StatusResponse:
         )
 
 
-@mcp.app.get('/health')
+@app.get('/health')
 async def health_check():
     """Health check endpoint for Hugging Face Spaces."""
     return {'status': 'ok'}
