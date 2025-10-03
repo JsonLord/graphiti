@@ -265,32 +265,6 @@ class GraphitiLLMConfig(BaseModel):
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
             )
 
-    @classmethod
-    def from_cli_and_env(cls, args: argparse.Namespace) -> 'GraphitiLLMConfig':
-        """Create LLM configuration from CLI arguments, falling back to environment variables."""
-        # Start with environment-based config
-        config = cls.from_env()
-
-        # CLI arguments override environment variables when provided
-        if hasattr(args, 'model') and args.model:
-            # Only use CLI model if it's not empty
-            if args.model.strip():
-                config.model = args.model
-            else:
-                # Log that empty model was provided and default is used
-                logger.warning(f'Empty model name provided, using default: {DEFAULT_LLM_MODEL}')
-
-        if hasattr(args, 'small_model') and args.small_model:
-            if args.small_model.strip():
-                config.small_model = args.small_model
-            else:
-                logger.warning(f'Empty small_model name provided, using default: {SMALL_LLM_MODEL}')
-
-        if hasattr(args, 'temperature') and args.temperature is not None:
-            config.temperature = args.temperature
-
-        return config
-
     def create_client(self) -> LLMClient:
         """Create an LLM client based on this configuration.
 
@@ -492,35 +466,24 @@ class GraphitiConfig(BaseModel):
         )
 
     @classmethod
-    def from_cli_and_env(cls, args: argparse.Namespace) -> 'GraphitiConfig':
-        """Create configuration from CLI arguments, falling back to environment variables."""
-        # Start with environment configuration
-        config = cls.from_env()
+    def from_env(cls) -> 'GraphitiConfig':
+        """Create a configuration instance from environment variables."""
+        group_id = os.environ.get('GROUP_ID', 'default')
+        use_custom_entities = (
+            os.environ.get('USE_CUSTOM_ENTITIES', 'false').lower() == 'true'
+        )
+        destroy_graph = os.environ.get('DESTROY_GRAPH', 'false').lower() == 'true'
 
-        # Apply CLI overrides
-        if args.group_id:
-            config.group_id = args.group_id
-        else:
-            config.group_id = 'default'
-
-        config.use_custom_entities = args.use_custom_entities
-        config.destroy_graph = args.destroy_graph
-
-        # Update LLM config using CLI args
-        config.llm = GraphitiLLMConfig.from_cli_and_env(args)
+        config = cls(
+            llm=GraphitiLLMConfig.from_env(),
+            embedder=GraphitiEmbedderConfig.from_env(),
+            neo4j=Neo4jConfig.from_env(),
+            group_id=group_id,
+            use_custom_entities=use_custom_entities,
+            destroy_graph=destroy_graph,
+        )
 
         return config
-
-
-class MCPConfig(BaseModel):
-    """Configuration for MCP server."""
-
-    transport: str = 'sse'  # Default to SSE transport
-
-    @classmethod
-    def from_cli(cls, args: argparse.Namespace) -> 'MCPConfig':
-        """Create MCP configuration from CLI arguments."""
-        return cls(transport=args.transport)
 
 
 # Configure logging
@@ -573,8 +536,21 @@ mcp = FastMCP(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan manager for the FastAPI application."""
+    global config
     logger.info('Starting up Graphiti MCP server...')
-    await initialize_server()
+
+    # Build configuration from environment variables
+    config = GraphitiConfig.from_env()
+
+    # Initialize Graphiti
+    await initialize_graphiti()
+
+    # Set MCP server host from environment variable
+    host = os.environ.get('MCP_SERVER_HOST')
+    if host:
+        logger.info(f'Setting MCP server host to: {host}')
+        mcp.settings.host = host
+
     yield
     logger.info('Shutting down Graphiti MCP server...')
 
@@ -1184,74 +1160,7 @@ async def get_status() -> StatusResponse:
         )
 
 
-async def initialize_server() -> MCPConfig:
-    """Parse CLI arguments and initialize the Graphiti server configuration."""
-    global config
-
-    parser = argparse.ArgumentParser(
-        description='Run the Graphiti MCP server with optional LLM client'
-    )
-    parser.add_argument(
-        '--group-id',
-        help='Namespace for the graph. This is an arbitrary string used to organize related data. '
-        'If not provided, a random UUID will be generated.',
-    )
-    parser.add_argument(
-        '--transport',
-        choices=['sse', 'stdio'],
-        default='sse',
-        help='Transport to use for communication with the client. (default: sse)',
-    )
-    parser.add_argument(
-        '--model', help=f'Model name to use with the LLM client. (default: {DEFAULT_LLM_MODEL})'
-    )
-    parser.add_argument(
-        '--small-model',
-        help=f'Small model name to use with the LLM client. (default: {SMALL_LLM_MODEL})',
-    )
-    parser.add_argument(
-        '--temperature',
-        type=float,
-        help='Temperature setting for the LLM (0.0-2.0). Lower values make output more deterministic. (default: 0.7)',
-    )
-    parser.add_argument('--destroy-graph', action='store_true', help='Destroy all Graphiti graphs')
-    parser.add_argument(
-        '--use-custom-entities',
-        action='store_true',
-        help='Enable entity extraction using the predefined ENTITY_TYPES',
-    )
-    parser.add_argument(
-        '--host',
-        default=os.environ.get('MCP_SERVER_HOST'),
-        help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable)',
-    )
-
-    args = parser.parse_args()
-
-    # Build configuration from CLI arguments and environment variables
-    config = GraphitiConfig.from_cli_and_env(args)
-
-    # Log the group ID configuration
-    if args.group_id:
-        logger.info(f'Using provided group_id: {config.group_id}')
-    else:
-        logger.info(f'Generated random group_id: {config.group_id}')
-
-    # Log entity extraction configuration
-    if config.use_custom_entities:
-        logger.info('Entity extraction enabled using predefined ENTITY_TYPES')
-    else:
-        logger.info('Entity extraction disabled (no custom entities will be used)')
-
-    # Initialize Graphiti
-    await initialize_graphiti()
-
-    if args.host:
-        logger.info(f'Setting MCP server host to: {args.host}')
-        # Set MCP server host from CLI or env
-        mcp.settings.host = args.host
-
-    # Return MCP configuration
-    return MCPConfig.from_cli(args)
+# The initialize_server function has been removed to eliminate CLI argument parsing.
+# All configuration is now handled via environment variables within the lifespan manager.
 
 
