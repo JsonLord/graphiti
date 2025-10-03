@@ -14,10 +14,8 @@ from typing import Any, TypedDict, cast
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
-from fastapi import FastAPI
 from mcp.server.fastmcp import FastMCP
 from openai import AsyncAzureOpenAI
-import uvicorn
 from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
@@ -569,6 +567,19 @@ mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
+
+
+@mcp.get('/', tags=['Health'])
+async def root():
+    """Root endpoint for health check."""
+    return {'status': 'ok', 'message': 'Graphiti MCP Server is running.'}
+
+
+@mcp.get('/health', tags=['Health'])
+async def health_check():
+    """Health check endpoint."""
+    return {'status': 'ok'}
+
 
 # Initialize Graphiti client
 graphiti_client: Graphiti | None = None
@@ -1245,26 +1256,7 @@ async def run_mcp_server():
         logger.info(
             f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
         )
-        # Create a new FastAPI app
-        app = FastAPI(
-            title='Graphiti MCP Server',
-            description='Exposes Graphiti functionality through the Model Context Protocol (MCP)',
-        )
-
-        @app.get('/health', tags=['Health'])
-        async def health_check():
-            """Health check endpoint."""
-            return {'status': 'ok'}
-
-        # Mount the MCP server
-        app.mount('/mcp', mcp)
-
-        # Run the app with uvicorn
-        # Assuming mcp.settings.port is an int. If not, it needs to be cast.
-        port = int(mcp.settings.port)
-        config = uvicorn.Config(app, host=mcp.settings.host, port=port, log_level='info')
-        server = uvicorn.Server(config)
-        await server.serve()
+        await mcp.run_sse_async()
 
 
 def main():
