@@ -33,7 +33,7 @@ try:
 
     _HAS_OPENSEARCH = True
 except ImportError:
-    OpenSearch = None
+    AsyncOpenSearch = None
     helpers = None
     _HAS_OPENSEARCH = False
 
