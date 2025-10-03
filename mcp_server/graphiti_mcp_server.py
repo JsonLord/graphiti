@@ -9,11 +9,14 @@ import logging
 import os
 import sys
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, TypedDict, cast
 
+import uvicorn
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
+from fastapi import FastAPI
 from mcp.server.fastmcp import FastMCP
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
@@ -567,6 +570,28 @@ mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan manager for the FastAPI application."""
+    logger.info('Starting up Graphiti MCP server...')
+    await initialize_server()
+    yield
+    logger.info('Shutting down Graphiti MCP server...')
+
+
+app = FastAPI(
+    title='Graphiti MCP Server',
+    description='Exposes Graphiti functionality through the Model Context Protocol (MCP)',
+    lifespan=lifespan,
+)
+app.mount('/mcp', mcp)
+
+
+@app.get('/healthcheck')
+async def healthcheck():
+    """Healthcheck endpoint."""
+    return {'status': 'ok'}
+
 
 # Initialize Graphiti client
 graphiti_client: Graphiti | None = None
@@ -1230,31 +1255,3 @@ async def initialize_server() -> MCPConfig:
     return MCPConfig.from_cli(args)
 
 
-async def run_mcp_server():
-    """Run the MCP server in the current event loop."""
-    # Initialize the server
-    mcp_config = await initialize_server()
-
-    # Run the server with stdio transport for MCP in the same event loop
-    logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
-    if mcp_config.transport == 'stdio':
-        await mcp.run_stdio_async()
-    elif mcp_config.transport == 'sse':
-        logger.info(
-            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
-        )
-        await mcp.run_sse_async()
-
-
-def main():
-    """Main function to run the Graphiti MCP server."""
-    try:
-        # Run everything in a single event loop
-        asyncio.run(run_mcp_server())
-    except Exception as e:
-        logger.error(f'Error initializing Graphiti MCP server: {str(e)}')
-        raise
-
-
-if __name__ == '__main__':
-    main()
