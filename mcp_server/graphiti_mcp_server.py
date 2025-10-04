@@ -1172,7 +1172,7 @@ async def get_status() -> StatusResponse:
         )
 
 
-async def initialize_server() -> MCPConfig:
+async def initialize_server() -> tuple[MCPConfig, argparse.Namespace]:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
     global config
 
@@ -1237,26 +1237,24 @@ async def initialize_server() -> MCPConfig:
     if args.host:
         logger.info(f'Setting MCP server host to: {args.host}')
         # Set MCP server host from CLI or env
-        mcp.settings.host = args.host
 
     # Return MCP configuration
-    return MCPConfig.from_cli(args)
+    return MCPConfig.from_cli(args), args
 
 
 async def run_mcp_server():
     """Run the MCP server in the current event loop."""
     # Initialize the server
-    mcp_config = await initialize_server()
+    mcp_config, args = await initialize_server()
 
     # Run the server with stdio transport for MCP in the same event loop
     logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
     if mcp_config.transport == 'stdio':
         await mcp.run_stdio_async()
     elif mcp_config.transport == 'sse':
-        logger.info(
-            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
-        )
-        await mcp.run_sse_async()
+        host = args.host or mcp.settings.host
+        logger.info(f'Running MCP server with SSE transport on {host}:{mcp.settings.port}')
+        await mcp.run_sse_async(host=host)
 
 
 def main():
